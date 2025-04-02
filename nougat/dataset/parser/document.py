@@ -4,6 +4,7 @@ Copyright (c) Meta Platforms, Inc. and affiliates.
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
+
 from collections import defaultdict
 from copy import copy
 import itertools
@@ -101,9 +102,16 @@ class LatexMath(Math):
 
 @dataclass
 class Author:
-    fullname: str = None
-    lastname: str = None
-    affiliation: str = None
+    content: str = ""
+
+    @property
+    def plaintext(self):
+        # 清理内容中的多余空白和换行
+        lines = [line.strip() for line in self.content.split("\n") if line.strip()]
+        return " ".join(lines)
+
+    def append(self, child: "Element"):
+        raise Exception(f"Cannot append elements to {self.__class__.__name__}")
 
 
 @dataclass
@@ -248,17 +256,24 @@ class EquationList(Element):
 @dataclass
 class Algorithm(Element):
     caption: Element = None
+    title: Element = None  # 添加title属性
     lines: List[Element] = field(default_factory=list)
     inline: bool = False
 
     def add_line(self, line: Element) -> Element:
+        """添加一行到算法中"""
         self.lines.append(line)
         line.parent = self
         return line
 
     @property
     def plaintext(self):
-        return "\n".join([line.plaintext for line in self.lines])
+        parts = []
+        if self.title:
+            parts.append(f"[ALGORITHM_TITLE]{self.title.plaintext}[ENDALGORITHM_TITLE]")
+        if self.lines:
+            parts.extend([line.plaintext for line in self.lines])
+        return "\n".join(parts)
 
 
 @dataclass
@@ -326,6 +341,7 @@ class SectionHeader(Element):
     id: str = None
     header: Element = None
     level: int = 0
+    hnum: int = 1
 
 
 @dataclass

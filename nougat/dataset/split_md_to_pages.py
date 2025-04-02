@@ -434,14 +434,23 @@ def split_markdown(
                     )
 
     for i in range(len(out)):
-        foot_match = re.findall(r"\[FOOTNOTE(.*?)\]\[ENDFOOTNOTE\]", out[i])
-        for match in foot_match:
-            out[i] = out[i].replace(
-                "[FOOTNOTE%s][ENDFOOTNOTE]" % match,
-                doc_fig.get("FOOTNOTE%s" % match, ""),
-            )
+        if out[i]:  # 如果页面内容不为空
 
-        out[i] = re.sub(r"\[(FIGURE|TABLE)(.*?)\](.*?)\[END\1\]", "", out[i])
+            # 处理内容
+            foot_match = re.findall(r"\[FOOTNOTE(.*?)\]\[ENDFOOTNOTE\]", out[i])
+            for match in foot_match:
+                footnote_content = doc_fig.get(f"FOOTNOTE{match}", "")
+                out[i] = out[i].replace(
+                    f"[FOOTNOTE{match}][ENDFOOTNOTE]", footnote_content
+                )
+
+            # 清理其他标记
+            out[i] = re.sub(r"\[(FIGURE|TABLE)(.*?)\](.*?)\[END\1\]", "", out[i])
+
+            # 添加页码标记（在内容末尾）
+            page_number = i + 1
+            out[i] = out[i].strip() + f"\n\n[PAGE_NUMBER]{page_number}[ENDPAGE_NUMBER]"
+
     return out, meta
 
 
@@ -457,12 +466,27 @@ if __name__ == "__main__":
     )
     parser.add_argument("--dpi", type=int, default=96)
     args = parser.parse_args()
-    md = open(args.md, "r", encoding="utf-8").read().replace("\xa0", " ")
+    md = (
+        open(args.md, "r", encoding="utf-8", errors="ignore")
+        .read()
+        .replace("\xa0", " ")
+    )
     pdf = pypdf.PdfReader(args.pdf)
-    try:
-        fig_info = json.load(open(args.figure, "r", encoding="utf-8"))
-    except FileNotFoundError:
-        fig_info = None
+    encodings_to_try = ["utf-8", "latin1", "cp1252"]
+    for encoding in encodings_to_try:
+        try:
+            fig_info = json.load(open(args.figure, "r", encoding=encoding))
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raise ValueError(
+            f"Could not decode file with any of the tried encodings: {encodings_to_try}"
+        )
+    # try:
+    #     fig_info = json.load(open(args.figure, "r", encoding="utf-8"))
+    # except FileNotFoundError:
+    #     fig_info = None
     pages, meta = split_markdown(md, pdf, fig_info)
     if args.out:
         outpath = os.path.join(args.out, os.path.basename(args.pdf).partition(".")[0])

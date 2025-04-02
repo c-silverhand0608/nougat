@@ -4,6 +4,7 @@ Copyright (c) Meta Platforms, Inc. and affiliates.
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
+
 import re
 import sys
 import requests
@@ -119,6 +120,7 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
                 if sv.match(".ltx_tag_section", child):
                     child.string = child.string.upper()
                 elif sv.match(".ltx_tag_subsection", child):
+                    # child.string = child.string.upper()
                     child.string = ""
                 parse_latexml_children(child, parent)
             elif "ltx_tag_bibitem" in classes:
@@ -174,18 +176,29 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
         ):
             placeholder = child.get_text().strip()
             resolved = False
-            if placeholder.isnumeric():
-                parent.append(TextElement(content=placeholder))
-                resolved = True
-            else:
-                target = child.attrs.get("href")
-                if target is not None:
-                    potential_num = target.partition(".bib")[2]
-                    if potential_num.isnumeric():
-                        parent.append(TextElement(content=potential_num))
-                        resolved = True
-            if not resolved:
-                raise ValueError("missing reference detected")
+            try:
+                if placeholder.isnumeric():
+                    parent.append(TextElement(content=placeholder))
+                    resolved = True
+                else:
+                    target = child.attrs.get("href")
+                    if target is not None:
+                        potential_num = target.partition(".bib")[2]
+                        if potential_num.isnumeric():
+                            parent.append(TextElement(content=potential_num))
+                            resolved = True
+                if not resolved:
+                    printerr(
+                        f"Missing reference detected for placeholder: {placeholder}",
+                        file=sys.stderr,
+                    )
+                    # 这里可以选择记录错误而不是引发异常
+                    # parent.append(TextElement(content="[Missing Reference]"))
+            except Exception as e:
+                printerr(
+                    f"Error processing missing citation or label: {placeholder}, {e}",
+                    file=sys.stderr,
+                )
         elif sv.match(
             ".ltx_bibblock, .ltx_role_author, .ltx_contact, .ltx_role_email, .ltx_role_affiliation",
             child,
@@ -257,20 +270,25 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
                 in_ref.target = target
                 text = child.get_text()
                 in_ref.target = target
-                if text.strip().isnumeric():
-                    in_ref.append(TextElement(content=text))
-                elif re.search(r"[A-Za-z][:;.,_]?\d", text):
-                    # probably a broken citation, go with link number instead
-                    in_ref.append(
-                        TextElement(
-                            content=re.sub(r"\D", "", target.partition(".bib")[2])
+                try:
+                    if text.strip().isnumeric():
+                        in_ref.append(TextElement(content=text))
+                    elif re.search(r"[A-Za-z][:;.,_]?\d", text):
+                        # probably a broken citation, go with link number instead
+                        in_ref.append(
+                            TextElement(
+                                content=re.sub(r"\D", "", target.partition(".bib")[2])
+                            )
                         )
+                    else:
+                        raise ValueError('unusable reference "%s"' % text)
+                    doc = parent.find_parent(Document)
+                    if doc:
+                        doc.add_inline_ref(in_ref)
+                except ValueError as e:
+                    printerr(
+                        f"Error processing reference: {text}, {e}", file=sys.stderr
                     )
-                else:
-                    raise ValueError('unusable reference "%s"' % text)
-                doc = parent.find_parent(Document)
-                if doc:
-                    doc.add_inline_ref(in_ref)
             else:
                 link = parent.append(Link())
                 link.target = target
@@ -341,14 +359,71 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
             parse_latexml_children(child, figure)
         elif sv.match("figure.ltx_figure", child):
             figure = parent.append(Figure())
+
+            # 从HTML的data-coords属性直接获取坐标
+            if "data-coords" in child.attrs:
+                coords = list(map(float, child["data-coords"].split(",")))
+                figure.coords = coords
+
+            # 保留原有ID和标题处理
             if "id" in child.attrs:
                 figure.id = child.attrs["id"]
             parse_latexml_children(child, figure)
+
+        # elif sv.match("figure.ltx_figure", child):
+        #     figure = parent.append(Figure())
+        #     if "id" in child.attrs:
+        #         figure.id = child.attrs["id"]
+        #     parse_latexml_children(child, figure)
         elif sv.match("figure.ltx_float", child):
             parse_latexml_children(child, parent)
+        elif sv.match(".ltx_float_caption, .ltx_caption", child):
+            # 查找最近的父元素
+            parent_elem = parent.find_parent((Figure, Table, Algorithm))
+            if parent_elem is not None:
+                if parent_elem.caption is None:
+                    parent_elem.caption = Paragraph(parent=parent_elem)
+
+                # 根据父元素类型添加不同的标签
+                if isinstance(parent_elem, Table):
+                    parent_elem.caption.append(TextElement(content="[TABLE_TITLE]"))
+                    parse_latexml_children(child, parent_elem.caption)
+                    parent_elem.caption.append(
+                        TextElement(content="[ENDTABLE_TITLE]\n\n")
+                    )
+                elif isinstance(parent_elem, Algorithm):
+                    print("OK")
+                    parent_elem.caption.append(TextElement(content="[ALGORITHM_TITLE]"))
+                    parse_latexml_children(child, parent_elem.caption)
+                    parent_elem.caption.append(
+                        TextElement(content="[ENDALGORITHM_TITLE]\n\n")
+                    )
+                elif isinstance(parent_elem, Figure):
+                    parent_elem.caption.append(TextElement(content="[FIGURE_TITLE]"))
+                    print("figure caption" + child.get_text())
+                    parse_latexml_children(child, parent_elem.caption)
+                    parent_elem.caption.append(
+                        TextElement(content="[ENDFIGURE_TITLE]\n\n")
+                    )
+            else:
+                # 如果找不到相应父元素,作为普通段落处理
+                para = parent.append(Paragraph())
+                parse_latexml_children(child, para)
+        # elif sv.match(".ltx_listing", child):
+        #     alg = parent.append(Algorithm())
+        #         # 查找算法标题
+        #     title_elem = child.find(class_="ltx_title")
+        #     if title_elem:
+        #         alg.title = SpanElement()
+        #         parse_latexml_children(title_elem, alg.title)
+        #     parse_latexml_children(child, alg)
         elif sv.match(".ltx_listing", child):
             alg = parent.append(Algorithm())
-            parse_latexml_children(child, alg)
+            # 解析算法内容
+            for line in child.find_all(class_="ltx_listingline"):
+                line_elem = alg.add_line(Element())
+                parse_latexml_children(line, line_elem)
+
         elif sv.match(".ltx_listingline", child):
             alg = parent.find_parent(Algorithm)
             if alg is not None:
@@ -388,11 +463,27 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
                 parse_latexml_children(child, fig.caption)
                 fig.caption.append(TextElement(content="\n"))
             else:
-                printerr("Figure caption outside figure element", file=sys.stderr)
+                printerr(
+                    "Caption outside figure/table/algorithm element", file=sys.stderr
+                )
                 para = parent.append(Paragraph())
                 parse_latexml_children(child, para)
+        elif sv.match(".ltx_float_algorithm", child):
+            alg = parent.find_parent(Figure)
+            if alg is not None:
+                if alg.caption is None:
+                    alg.caption = Paragraph(parent=alg)
+                # 添加算法标题标签
+                alg.caption.append(TextElement(content="[ALGORITHM_TITLE]"))
+                parse_latexml_children(child, alg.caption)
+                alg.caption.append(TextElement(content="[ENDALGORITHM_TITLE]"))
+            else:
+                printerr(
+                    "Algorithm caption outside figure environment", file=sys.stderr
+                )
         elif sv.match(".ltx_break", child):
-            parent.append(TextElement(content="\n\n"))
+            parent.append(Author())
+
         elif sv.match(".ltx_abstract, .ltx_acknowledgements", child):
             abstract = parent.append(Section())
             parse_latexml_children(child, abstract)

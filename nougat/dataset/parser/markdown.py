@@ -4,7 +4,8 @@ Copyright (c) Meta Platforms, Inc. and affiliates.
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
-from typing import Iterable, List, Optional, Tuple
+
+from typing import Iterable, List, Optional, Tuple, Dict
 import re
 from uuid import uuid4
 from nougat.dataset.utils import normalize_tex
@@ -114,6 +115,32 @@ def format_element(
             return [latex_escape(element.content)]
         else:
             return [element.content]
+
+    if isinstance(element, Author):
+        if not element.content.strip():
+            return []
+
+        content = element.plaintext
+        if latex_env:
+            content = latex_escape(content)
+
+        # 确保内容被正确包装在标签中
+        return [f"[AUTHOR_INFORMATION]{content}[ENDAUTHOR_INFORMATION]"]
+
+    # 在处理作者列表的部分
+    if isinstance(element, Document):
+        parts = []
+        if element.authors:
+            author_parts = []
+            for i, author in enumerate(element.authors):
+                author_text = format_element(author, keep_refs, latex_env)
+                if author_text:
+                    author_parts.extend(author_text)
+                    if i < len(element.authors) - 1:
+                        author_parts.append(" & ")
+            parts.extend(author_parts)
+            parts.append("\n\n")
+
     if isinstance(element, Bold):
         parts = format_children(element, keep_refs, latex_env)
         if element.find_parent(Algorithm) is not None:
@@ -175,17 +202,48 @@ def format_element(
             parts.extend(caption_parts + ["\n"])
         parts.append("[ENDTABLE]\n\n")
         return parts
+
+    # 修改Figure处理部分
     if isinstance(element, Figure):
-        parts = format_element(element.caption, keep_refs)
-        remove_trailing_whitespace(parts)
-        return (
-            [
-                "[FIGURE%s]\n"
-                % (str(uuid4())[:5] if element.id is None else ":" + str(element.id))
-            ]
-            + parts
-            + ["\n[ENDFIGURE]\n\n"]
+        # 直接使用内存中的坐标数据
+        coords_str = (
+            ",".join(f"{c:.4f}" for c in element.coords)
+            if hasattr(element, "coords")
+            else ""
         )
+
+        # 构建标准格式
+        parts = [
+            f"[FIGURE:{element.id}]\n" if element.id else "[FIGURE]\n",
+            f"[FIGURE_COORDS]{coords_str}[ENDFIGURE_COORDS]\n",
+        ]
+
+        # 添加标题
+        if element.caption:
+            parts.append("[FIGURE_TITLE]")
+            parts.extend(format_element(element.caption, keep_refs))
+            parts.append("[ENDFIGURE_TITLE]\n")
+
+        parts.append("[ENDFIGURE]\n\n")
+        return parts
+    # if isinstance(element, Figure):
+    #     parts = format_element(element.caption, keep_refs)
+    #     print("[FIGURE%s]\n"
+    #             % (str(uuid4())[:5] if element.id is None else ":" + str(element.id)))
+    #     remove_trailing_whitespace(parts)
+    #     return (
+    #         [
+    #             "[FIGURE%s]\n"
+    #             % (str(uuid4())[:5] if element.id is None else ":" + str(element.id))
+    #         ]
+    #         + parts
+    #         + ["\n[ENDFIGURE]\n\n"]
+    #         #  [
+    #         #      "[FIGURE%s]\n"
+    #         #     % (str(uuid4())[:5] if element.id is None else ":" + str(element.id))
+    #         #  ] +
+    #         #  ["\n[ENDFIGURE]\n"] + parts + ["\n\n"]
+    #     )
     if isinstance(element, SectionHeader):
         parts = ["# "]
         if element.id:
@@ -196,8 +254,7 @@ def format_element(
             header = format_iterator(element.children, keep_refs)
         _, title, _ = leading_trailing_whitespace("".join(header))
         parts.append(title)
-        parts.append("\n\n")
-        return parts
+        return ["[TITLE]" + "".join(parts) + "[ENDTITLE]\n\n"]
     if isinstance(element, Section):
         children_parts = format_children(element, keep_refs)
         if is_empty(children_parts):
@@ -211,7 +268,7 @@ def format_element(
             parts.append("\n\n")
         else:
             parts = []
-        return parts + children_parts
+        return ["[TEXT]" + "".join(parts + children_parts) + "[ENDTEXT]\n\n"]
     if isinstance(element, Footnote):
         if element.id is not None:
             foot = f"\n[FOOTNOTE:{element.id}]Footnote {element.id}: "
@@ -251,7 +308,7 @@ def format_element(
                     parts.append(text)
         lead, eqs, tail = leading_trailing_whitespace(parts)
         s = " ".join(eqs).replace(r"\] \[", " ")
-        return [*lead, s, *tail]
+        return ["[FORMULA]" + "".join([*lead, s, *tail]) + "[ENDFORMULA]\n\n"]
     if isinstance(element, EquationList):
         parts = ["\n"]
         items = element.equations
@@ -260,9 +317,19 @@ def format_element(
         if items:
             parts.extend(items)
             parts.append("\n")
-        return parts
+        return ["[FORMULA_LIST]" + "".join(parts) + "[ENDFORMULA_LIST]\n\n"]
+
     if isinstance(element, Algorithm):
         parts = []
+        # 添加算法标题标签
+        if element.caption:
+            caption = [
+                "[ALGORITHM_TITLE]"
+                + "".join(format_element(element.caption, keep_refs))
+                + "[ENDALGORITHM_TITLE]\n\n"
+            ]
+        else:
+            caption = []
         items = element.lines
         items = ["".join(format_element(item, keep_refs)).rstrip() for item in items]
         if element.inline:
@@ -275,7 +342,7 @@ def format_element(
             parts.extend(items)
             append = "`" if element.inline else "```\n\n"
             parts.append(append)
-        return parts
+        return caption + ["[ALGORITHM]" + "".join(parts) + "[ENDALGORITHM]\n\n"]
     if isinstance(element, DefinitionList):
         parts = ["\n"]
         if element.header is not None:
@@ -388,9 +455,41 @@ def format_document(
     text = re.sub(r"\n[\t ]*$", "\n", text, flags=re.MULTILINE)
     text = re.sub(r"(?<!\n) {2,}", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text).lstrip()
+    # text = text.replace("\xa0", " ")
+
+    # text = re.sub(r'<Author_information>\s*&\s*<Author_information>',
+    #               r'<Author_information> & <Author_information>', text)
+    # text = re.sub(r'<Author_information>\s+',
+    #               r'<Author_information>', text)
+    # text = re.sub(r'\s+<Author_information>',
+    #               r'<Author_information>', text)
+
+    # # 清理表格标题标签
+    # text = re.sub(r'\[TABLE_TITLE\]\s+', '[TABLE_TITLE]', text)
+    # text = re.sub(r'\s+\[ENDTABLE_TITLE\]', '[ENDTABLE_TITLE]', text)
+    # text = re.sub(r'\[ENDTABLE_TITLE\]([a-zA-Z])', r'[ENDTABLE_TITLE]\n\1', text)
+
+    # # 确保表格标题和内容之间有适的换行
+    # text = re.sub(r'\[ENDTABLE_TITLE\]\n*', '[ENDTABLE_TITLE]\n\n', text)
+
+    # # 清理图片标题标签
+    # text = re.sub(r'\[FIGURE_TITLE\]\s+', '[FIGURE_TITLE]', text)
+    # text = re.sub(r'\s+\[ENDFIGURE_TITLE\]', '[ENDFIGURE_TITLE]', text)
+    # text = re.sub(r'\[ENDFIGURE_TITLE\]([a-zA-Z])', r'[ENDFIGURE_TITLE]\n\1', text)
+
+    # # 确保图片标题和内容之间有适当的换行
+    # text = re.sub(r'\[ENDFIGURE_TITLE\]\n*', '[ENDFIGURE_TITLE]\n\n', text)
+
+    # # 清理算法标题标签
+    # text = re.sub(r'\[ALGORITHM_TITLE\]\s+', '[ALGORITHM_TITLE]', text)
+    # text = re.sub(r'\s+\[ENDALGORITHM_TITLE\]', '[ENDALGORITHM_TITLE]', text)
+    # text = re.sub(r'\[ENDALGORITHM_TITLE\]([a-zA-Z])', r'[ENDALGORITHM_TITLE]\n\1', text)
+
+    # # 确保算法标题和内容之间有适当的换行
+    # text = re.sub(r'\[ENDALGORITHM_TITLE\]\n*', '[ENDALGORITHM_TITLE]\n\n', text)
     figures = {unidecode(m[0] + m[1]): m[2].strip() for m in figure_regex.findall(text)}
-    text = figure_regex.sub(
-        r"[\1\2][END\1]",
-        text,
-    )
+    # text = figure_regex.sub(
+    #     r"[\1\2][END\1]",
+    #     text,
+    # )
     return text, figures

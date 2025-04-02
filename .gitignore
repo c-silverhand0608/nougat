@@ -143,3 +143,6 @@ ckpt*/
 
 # Misc
 pdfs
+
+**/__test*
+**/*.log
