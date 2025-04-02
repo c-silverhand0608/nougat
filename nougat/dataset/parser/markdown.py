@@ -139,7 +139,7 @@ def format_element(
                     if i < len(element.authors) - 1:
                         author_parts.append(" & ")
             parts.extend(author_parts)
-            parts.append("\n\n")
+            parts.append("\n")
 
     if isinstance(element, Bold):
         parts = format_children(element, keep_refs, latex_env)
@@ -220,11 +220,11 @@ def format_element(
 
         # 添加标题
         if element.caption:
-            parts.append("[FIGURE_TITLE]")
+            # parts.append("[FIGURE_TITLE]")
             parts.extend(format_element(element.caption, keep_refs))
-            parts.append("[ENDFIGURE_TITLE]\n")
+            # parts.append("[ENDFIGURE_TITLE]\n")
 
-        parts.append("[ENDFIGURE]\n\n")
+        parts.append("[ENDFIGURE]\n")
         return parts
     # if isinstance(element, Figure):
     #     parts = format_element(element.caption, keep_refs)
@@ -237,12 +237,12 @@ def format_element(
     #             % (str(uuid4())[:5] if element.id is None else ":" + str(element.id))
     #         ]
     #         + parts
-    #         + ["\n[ENDFIGURE]\n\n"]
+    #         + ["\n[ENDFIGURE]\n"]
     #         #  [
     #         #      "[FIGURE%s]\n"
     #         #     % (str(uuid4())[:5] if element.id is None else ":" + str(element.id))
     #         #  ] +
-    #         #  ["\n[ENDFIGURE]\n"] + parts + ["\n\n"]
+    #         #  ["\n[ENDFIGURE]\n"] + parts + ["\n"]
     #     )
     if isinstance(element, SectionHeader):
         parts = ["# "]
@@ -268,7 +268,7 @@ def format_element(
             parts.append("\n\n")
         else:
             parts = []
-        return ["[TEXT]" + "".join(parts + children_parts) + "[ENDTEXT]\n\n"]
+        return ["[TEXT]" + "".join(parts + children_parts) + "[ENDTEXT]\n"]
     if isinstance(element, Footnote):
         if element.id is not None:
             foot = f"\n[FOOTNOTE:{element.id}]Footnote {element.id}: "
@@ -324,9 +324,9 @@ def format_element(
         # 添加算法标题标签
         if element.caption:
             caption = [
-                "[ALGORITHM_TITLE]"
-                + "".join(format_element(element.caption, keep_refs))
-                + "[ENDALGORITHM_TITLE]\n\n"
+                # "[ALGORITHM_TITLE]"
+                +"".join(format_element(element.caption, keep_refs))
+                # + "[ENDALGORITHM_TITLE]\n"
             ]
         else:
             caption = []
@@ -342,7 +342,7 @@ def format_element(
             parts.extend(items)
             append = "`" if element.inline else "```\n\n"
             parts.append(append)
-        return caption + ["[ALGORITHM]" + "".join(parts) + "[ENDALGORITHM]\n\n"]
+        return caption + ["[ALGORITHM]" + "".join(parts) + "[ENDALGORITHM]\n"]
     if isinstance(element, DefinitionList):
         parts = ["\n"]
         if element.header is not None:
@@ -450,46 +450,59 @@ def format_document(
     parts.append("\n")
     parts.extend(format_children(doc, keep_refs))
     text = "".join(parts)
+
+    with open("./test.mmd", "w") as f:
+        f.write(text)
+
     text = text.replace("\xa0", " ")  # replace non-breakable spaces
     text = re.sub(r" $", "", text, flags=re.MULTILINE)
     text = re.sub(r"\n[\t ]*$", "\n", text, flags=re.MULTILINE)
     text = re.sub(r"(?<!\n) {2,}", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text).lstrip()
-    # text = text.replace("\xa0", " ")
 
-    # text = re.sub(r'<Author_information>\s*&\s*<Author_information>',
-    #               r'<Author_information> & <Author_information>', text)
-    # text = re.sub(r'<Author_information>\s+',
-    #               r'<Author_information>', text)
-    # text = re.sub(r'\s+<Author_information>',
-    #               r'<Author_information>', text)
+    text = text.replace("\xa0", " ")
 
-    # # 清理表格标题标签
-    # text = re.sub(r'\[TABLE_TITLE\]\s+', '[TABLE_TITLE]', text)
-    # text = re.sub(r'\s+\[ENDTABLE_TITLE\]', '[ENDTABLE_TITLE]', text)
-    # text = re.sub(r'\[ENDTABLE_TITLE\]([a-zA-Z])', r'[ENDTABLE_TITLE]\n\1', text)
+    text = re.sub(
+        r"<Author_information>\s*&\s*<Author_information>",
+        r"<Author_information> & <Author_information>",
+        text,
+    )
+    text = re.sub(r"<Author_information>\s+", r"<Author_information>", text)
+    text = re.sub(r"\s+<Author_information>", r"<Author_information>", text)
 
-    # # 确保表格标题和内容之间有适的换行
-    # text = re.sub(r'\[ENDTABLE_TITLE\]\n*', '[ENDTABLE_TITLE]\n\n', text)
+    # 清理表格标题标签
+    text = re.sub(r"\[TABLE_TITLE\]\s+", "[TABLE_TITLE]", text)
+    text = re.sub(r"\s+\[ENDTABLE_TITLE\]", "[ENDTABLE_TITLE]", text)
+    text = re.sub(r"\[ENDTABLE_TITLE\]([a-zA-Z])", r"[ENDTABLE_TITLE]\n\1", text)
 
-    # # 清理图片标题标签
-    # text = re.sub(r'\[FIGURE_TITLE\]\s+', '[FIGURE_TITLE]', text)
-    # text = re.sub(r'\s+\[ENDFIGURE_TITLE\]', '[ENDFIGURE_TITLE]', text)
-    # text = re.sub(r'\[ENDFIGURE_TITLE\]([a-zA-Z])', r'[ENDFIGURE_TITLE]\n\1', text)
+    # 确保表格标题和内容之间有适的换行
+    text = re.sub(r"\[ENDTABLE_TITLE\]\n*", "[ENDTABLE_TITLE]\n", text)
 
-    # # 确保图片标题和内容之间有适当的换行
-    # text = re.sub(r'\[ENDFIGURE_TITLE\]\n*', '[ENDFIGURE_TITLE]\n\n', text)
+    # 清理图片标题标签
+    text = re.sub(r"\[FIGURE_TITLE\]\s+", "[FIGURE_TITLE]", text)
+    text = re.sub(r"\s+\[ENDFIGURE_TITLE\]", "[ENDFIGURE_TITLE]", text)
+    text = re.sub(r"\[ENDFIGURE_TITLE\]([a-zA-Z])", r"[ENDFIGURE_TITLE]\n\1", text)
 
-    # # 清理算法标题标签
-    # text = re.sub(r'\[ALGORITHM_TITLE\]\s+', '[ALGORITHM_TITLE]', text)
-    # text = re.sub(r'\s+\[ENDALGORITHM_TITLE\]', '[ENDALGORITHM_TITLE]', text)
-    # text = re.sub(r'\[ENDALGORITHM_TITLE\]([a-zA-Z])', r'[ENDALGORITHM_TITLE]\n\1', text)
+    # 确保图片标题和内容之间有适当的换行
+    text = re.sub(r"\[ENDFIGURE_TITLE\]\n*", "[ENDFIGURE_TITLE]\n", text)
 
-    # # 确保算法标题和内容之间有适当的换行
-    # text = re.sub(r'\[ENDALGORITHM_TITLE\]\n*', '[ENDALGORITHM_TITLE]\n\n', text)
+    # 清理算法标题标签
+    text = re.sub(r"\[ALGORITHM_TITLE\]\s+", "[ALGORITHM_TITLE]", text)
+    text = re.sub(r"\s+\[ENDALGORITHM_TITLE\]", "[ENDALGORITHM_TITLE]", text)
+    text = re.sub(
+        r"\[ENDALGORITHM_TITLE\]([a-zA-Z])", r"[ENDALGORITHM_TITLE]\n\1", text
+    )
+
+    # 确保算法标题和内容之间有适当的换行
+    text = re.sub(r"\[ENDALGORITHM_TITLE\]\n*", "[ENDALGORITHM_TITLE]\n", text)
     figures = {unidecode(m[0] + m[1]): m[2].strip() for m in figure_regex.findall(text)}
+
     # text = figure_regex.sub(
     #     r"[\1\2][END\1]",
     #     text,
     # )
+
+    with open("./processed.mmd", "w") as f:
+        f.write(text)
+
     return text, figures

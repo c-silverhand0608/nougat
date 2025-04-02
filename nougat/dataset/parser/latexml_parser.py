@@ -392,7 +392,6 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
                         TextElement(content="[ENDTABLE_TITLE]\n\n")
                     )
                 elif isinstance(parent_elem, Algorithm):
-                    print("OK")
                     parent_elem.caption.append(TextElement(content="[ALGORITHM_TITLE]"))
                     parse_latexml_children(child, parent_elem.caption)
                     parent_elem.caption.append(
@@ -416,6 +415,9 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
         #     if title_elem:
         #         alg.title = SpanElement()
         #         parse_latexml_children(title_elem, alg.title)
+        #     parse_latexml_children(child, alg)
+        # elif sv.match(".ltx_listing", child):
+        #     alg = parent.append(Algorithm())
         #     parse_latexml_children(child, alg)
         elif sv.match(".ltx_listing", child):
             alg = parent.append(Algorithm())

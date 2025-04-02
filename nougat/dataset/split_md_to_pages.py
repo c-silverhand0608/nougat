@@ -244,7 +244,7 @@ def split_markdown(
     minlen: int = 3,
     min_num_words: int = 22,
     doc_paragraph_chars: int = 1000,
-    min_score: float = 0.75,
+    min_score: float = 0.75,  # 0.75
     staircase: bool = True,
 ) -> Tuple[List[str], Dict]:
     """

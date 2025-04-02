@@ -26,6 +26,13 @@ logging.basicConfig()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+from charset_normalizer import from_path
+
+
+def read_file_with_auto_encoding(file_path):
+    result = from_path(file_path).best()
+    return result.text
+
 
 def process_paper(
     fname: str,
@@ -53,34 +60,67 @@ def process_paper(
         pdf = pypdf.PdfReader(pdf_file)
         total_pages = len(pdf.pages)
         outpath: Path = args.out / fname
-        # skip this paper if already processed
-        dirs_with_same_stem = list(args.out.glob(fname.partition("v")[0] + "*"))
-        if (
-            len(dirs_with_same_stem) > 0
-            and len(list(dirs_with_same_stem[0].iterdir())) > 0
-            and not args.recompute
-        ):
-            logger.info(
-                "%s (or another version thereof) already processed. Skipping paper",
-                fname,
-            )
-            return total_pages, len(list(outpath.glob("*.mmd")))
+
+        # 尝试多种编码方式读取HTML文件
+        encodings = ["utf-8", "utf-8-sig", "latin1", "cp1252", "gbk"]
+        content = None
+
+        for encoding in encodings:
+            try:
+                with open(html_file, "r", encoding=encoding) as f:
+                    content = f.read()
+                logger.info(f"Successfully read file with {encoding} encoding")
+                break
+            except UnicodeDecodeError:
+                continue
+
+        if content is None:
+            logger.error(f"Failed to read {html_file} with any encoding")
+            return total_pages, 0
+
         html = BeautifulSoup(
             htmlmin.minify(
-                open(html_file, "r", encoding="utf-8").read().replace("\xa0", " "),
+                content.replace("\xa0", " "),
                 remove_all_empty_space=True,
             ),
             features="html.parser",
         )
+
         doc = parse_latexml(html)
         if doc is None:
-            return
+            logger.info(f"Failed to parse LaTeXML for {fname}")
+            return total_pages, 0
+
         out, fig = format_document(doc, keep_refs=True)
 
-        if args.markdown:
-            md_out = args.markdown / (fname + ".mmd")
-            with open(md_out, "w", encoding="utf-8") as f:
-                f.write(out)
+        # 检查是否已经有 <Author_Information> 标签
+        if "<Author_Information>" not in out:
+            # 构建对应的 txt 文件路径
+            nametxt_dir = Path(
+                os.path.join(
+                    # "/data1/nzw/latex_pdf/generated_dataset/",
+                    "/home/ninziwei/lyj/nougat/__test_1",
+                    "src",
+                    fname,
+                    "nametxt",
+                )
+            )  # 根据实际路径调整
+            if nametxt_dir.exists():
+                for txt_file in os.listdir(nametxt_dir):
+                    txt_path = nametxt_dir / txt_file
+                    with open(txt_path, "r", encoding="utf-8") as txt_file:
+                        author_info = txt_file.read().strip()
+
+                    # 如果 txt 文件不为空，则插入作者信息
+                    if author_info:
+                        # 在 [ENDTITLE] 标签后插入作者信息
+                        out = out.replace(
+                            "[ENDTITLE]",
+                            f"[ENDTITLE]\n\n<Author_Information>{author_info}</Author_Information>",
+                        )
+                        logger.info(f"Inserted author information for {fname}")
+                    else:
+                        logger.info(f"Author info file not found for {fname}")
 
         if json_file is None:
             json_file = call_pdffigures(pdf_file, args.figure)
@@ -128,12 +168,19 @@ def process_paper(
     return total_pages, num_recognized_pages
 
 
+def find_pdf_file(pdf_dir, fname):
+    """递归查找指定文件夹中的 PDF 文件"""
+    for pdf_file in pdf_dir.rglob(f"{fname}.pdf"):
+        return pdf_file
+    return Path("")  # 使用空路径表示未找到文件
+
+
 def process_htmls(args):
     for input_dir in (args.pdfs, args.html):
         if not input_dir.exists() and not input_dir.is_dir():
             logger.error("%s does not exist or is no dir.", input_dir)
             return
-    htmls: List[Path] = args.html.glob("*.html")
+    htmls: List[Path] = args.html.rglob("*.html")
     args.out.mkdir(exist_ok=True)
     if args.markdown:
         args.markdown.mkdir(exist_ok=True)
@@ -143,7 +190,9 @@ def process_htmls(args):
         tasks = {}
         for j, html_file in enumerate(htmls):
             fname = html_file.stem
-            pdf_file = args.pdfs / (fname + ".pdf")
+            # pdf_file = args.pdfs / (fname + ".pdf")
+            pdf_file = find_pdf_file(args.pdfs, fname)
+
             if not pdf_file.exists():
                 logger.info("%s pdf could not be found.", fname)
                 continue
