@@ -4,6 +4,7 @@ Copyright (c) Meta Platforms, Inc. and affiliates.
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
+
 import argparse
 from pathlib import Path
 from typing import List, Optional
@@ -61,7 +62,12 @@ if __name__ == "__main__":
             continue
         if doc is None:
             continue
+
         out, fig = format_document(doc, keep_refs=True)
+
+        if not args.out.exists():
+            args.out.mkdir(parents=True)
+
         outp = (args.out if args.out.is_dir() else args.out.parent) / (f.stem + ".mmd")
         with open(outp, "w", encoding="utf-8") as f:
             f.write(out)

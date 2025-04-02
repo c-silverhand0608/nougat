@@ -205,27 +205,30 @@ def format_element(
 
     # 修改Figure处理部分
     if isinstance(element, Figure):
-        # 直接使用内存中的坐标数据
+        # 提取坐标信息
         coords_str = (
             ",".join(f"{c:.4f}" for c in element.coords)
             if hasattr(element, "coords")
             else ""
         )
 
-        # 构建标准格式
         parts = [
-            f"[FIGURE:{element.id}]\n" if element.id else "[FIGURE]\n",
+            f"\n[FIGURE:{element.id}]\n" if element.id else "[FIGURE]\n",
             f"[FIGURE_COORDS]{coords_str}[ENDFIGURE_COORDS]\n",
         ]
 
-        # 添加标题
+        # 添加标题内容（关键修复）
         if element.caption:
-            # parts.append("[FIGURE_TITLE]")
-            parts.extend(format_element(element.caption, keep_refs))
-            # parts.append("[ENDFIGURE_TITLE]\n")
+            caption_parts = format_element(element.caption, keep_refs)
+            parts.extend([*caption_parts])
 
-        parts.append("[ENDFIGURE]\n")
+        # 添加主体内容（关键修复）
+        content_parts = format_children(element, keep_refs)
+        parts.extend(content_parts)
+
+        parts.append("[ENDFIGURE]\n\n")
         return parts
+
     # if isinstance(element, Figure):
     #     parts = format_element(element.caption, keep_refs)
     #     print("[FIGURE%s]\n"
@@ -317,19 +320,16 @@ def format_element(
         if items:
             parts.extend(items)
             parts.append("\n")
-        return ["[FORMULA_LIST]" + "".join(parts) + "[ENDFORMULA_LIST]\n\n"]
+        # return ["[FORMULA_LIST]" + "".join(parts) + "[ENDFORMULA_LIST]\n\n"]
+        return "".join(parts) + "\n\n"
 
     if isinstance(element, Algorithm):
         parts = []
         # 添加算法标题标签
         if element.caption:
-            caption = [
-                # "[ALGORITHM_TITLE]"
-                +"".join(format_element(element.caption, keep_refs))
-                # + "[ENDALGORITHM_TITLE]\n"
-            ]
+            caption = "".join(format_element(element.caption, keep_refs))
         else:
-            caption = []
+            caption = ""
         items = element.lines
         items = ["".join(format_element(item, keep_refs)).rstrip() for item in items]
         if element.inline:
@@ -340,9 +340,9 @@ def format_element(
             prepend = "`" if element.inline else "\n```\n"
             parts.append(prepend)
             parts.extend(items)
-            append = "`" if element.inline else "```\n\n"
+            append = "`" if element.inline else "```\n"
             parts.append(append)
-        return caption + ["[ALGORITHM]" + "".join(parts) + "[ENDALGORITHM]\n"]
+        return ["[ALGORITHM]\n" + caption + "".join(parts) + "[ENDALGORITHM]\n\n"]
     if isinstance(element, DefinitionList):
         parts = ["\n"]
         if element.header is not None:
@@ -451,9 +451,6 @@ def format_document(
     parts.extend(format_children(doc, keep_refs))
     text = "".join(parts)
 
-    with open("./test.mmd", "w") as f:
-        f.write(text)
-
     text = text.replace("\xa0", " ")  # replace non-breakable spaces
     text = re.sub(r" $", "", text, flags=re.MULTILINE)
     text = re.sub(r"\n[\t ]*$", "\n", text, flags=re.MULTILINE)
@@ -501,8 +498,5 @@ def format_document(
     #     r"[\1\2][END\1]",
     #     text,
     # )
-
-    with open("./processed.mmd", "w") as f:
-        f.write(text)
 
     return text, figures

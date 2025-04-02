@@ -4,6 +4,8 @@ Copyright (c) Meta Platforms, Inc. and affiliates.
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
+
+import os
 import argparse
 import logging
 import pypdfium2
@@ -38,25 +40,35 @@ def rasterize_paper(
     pils = []
     if outpath is None:
         return_pil = True
+
+    pdf_doc = None
     try:
         if isinstance(pdf, (str, Path)):
-            pdf = pypdfium2.PdfDocument(pdf)
+            pdf_doc = pypdfium2.PdfDocument(pdf)
+        else:
+            pdf_doc = pdf
+
         if pages is None:
-            pages = range(len(pdf))
-        renderer = pdf.render(
+            pages = range(len(pdf_doc))
+
+        renderer = pdf_doc.render(
             pypdfium2.PdfBitmap.to_pil,
             page_indices=pages,
             scale=dpi / 72,
         )
+
         for i, image in zip(pages, renderer):
             if return_pil:
                 page_bytes = io.BytesIO()
                 image.save(page_bytes, "bmp")
                 pils.append(page_bytes)
             else:
-                image.save((outpath / ("%02d.png" % (i + 1))), "png")
-    except Exception as e:
-        logging.error(e)
+                image.save((os.path.join(outpath, "%02d.png" % (i + 1))), "png")
+    finally:
+        # 确保在函数结束时关闭文档，但只关闭我们创建的文档
+        if isinstance(pdf, (str, Path)) and pdf_doc is not None:
+            pdf_doc.close()
+
     if return_pil:
         return pils
 

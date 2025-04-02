@@ -4,6 +4,7 @@ Copyright (c) Meta Platforms, Inc. and affiliates.
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
+
 """
 This script creates an index of all available pages and parses the meta data for all pages into a separate file.
 Optionally TesseractOCR is called for each image.
@@ -40,8 +41,11 @@ def read_metadata(data: Dict) -> List[List[Dict]]:
     N = data["num_pages"]
     out = [[] for _ in range(N)]
     # pdffigures2 meta data
-    if "pdffigures" in data and data["pdffigures"]:
-        for item in data["pdffigures"]:
+    if "pdffigures" in data and "figures" in data["pdffigures"]:
+        for item in data["pdffigures"]["figures"]:  # 修改这里
+            if not isinstance(item, dict):
+                print(f"WARNING: Skipping invalid item: {item}")
+                continue
             p = item.pop("page", None)
             if p is None or p >= N:
                 continue

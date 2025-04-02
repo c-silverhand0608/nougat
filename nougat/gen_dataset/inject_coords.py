@@ -155,7 +155,11 @@ def inject_coordinates(html_path, mapping_path, output_path):
         # 若最终 match 不为 None，就注入坐标
         if match:
             total_matched += 1
-            figure = img_tag.find_parent("figure")
+            # 查找父级 figure 或 span，且必须包含类名 ltx_figure
+            figure = img_tag.find_parent(
+                lambda tag: tag.name in ["figure", "span"]
+                and "ltx_figure" in tag.get("class", [])
+            )
             if figure:
                 coords_str = ",".join(f"{c:.4f}" for c in match["coords"])
                 figure["data-coords"] = coords_str

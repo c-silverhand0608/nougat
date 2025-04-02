@@ -270,7 +270,7 @@ class Algorithm(Element):
     def plaintext(self):
         parts = []
         if self.title:
-            parts.append(f"[ALGORITHM_TITLE]{self.title.plaintext}[ENDALGORITHM_TITLE]")
+            parts.append(f"{self.title.plaintext}")
         if self.lines:
             parts.extend([line.plaintext for line in self.lines])
         return "\n".join(parts)

@@ -11,7 +11,7 @@ import multiprocessing
 from pebble import ProcessPool
 from concurrent.futures import TimeoutError
 from tqdm import tqdm
-from typing import Tuple
+from typing import Tuple, List
 import os
 from pathlib import Path
 import logging
@@ -29,6 +29,50 @@ logger.setLevel(logging.INFO)
 from charset_normalizer import from_path
 
 
+def figure_label_to_name(label_str: str) -> str:
+    """
+    如果 [FIGURE:S5.F7] -> '7' 的简单解析，比如只取结尾数字。
+    如果你的 figure_info 里 'name':'7'，就这样匹配。
+    若不需要解析，直接 return label_str
+    """
+    m = re.search(r"(\d+)$", label_str)
+    return m.group(1) if m else label_str
+
+
+def remove_invalid_figures(mmd_text: str, page_idx: int, figure_map: dict) -> str:
+    """
+    mmd_text: 页面文本(含 [FIGURE:xxx]... )
+    page_idx: 0-based 页索引
+    figure_map: {page_num(1-based): set-of-names}
+                e.g. {5:{'1','2'},6:{'16'},...}
+    """
+    pattern = re.compile(r"\[FIGURE:(.*?)\](.*?)\[ENDFIGURE\]", re.S)
+
+    valid_names = figure_map.get(page_idx + 1, set())
+
+    def _replacer(match):
+        label_str = match.group(1).strip()  # e.g. "S5.F7"
+        label_name = figure_label_to_name(label_str)
+        if label_name in valid_names:
+            return match.group(0)  # 保留整块
+        else:
+            return ""
+
+    # return mmd_text
+    return pattern.sub(_replacer, mmd_text)
+
+
+def build_page_to_figs(fig_info):
+    page_map = {}
+    for fig in fig_info:
+        page = fig["page"] + 1  # PDF页 (1-based)
+        name = fig.get("name", "").strip()
+        if page not in page_map:
+            page_map[page] = set()
+        page_map[page].add(name)
+    return page_map
+
+
 def read_file_with_auto_encoding(file_path):
     result = from_path(file_path).best()
     return result.text
@@ -42,179 +86,169 @@ def process_paper(
     args: argparse.Namespace,
 ) -> Tuple[int, int]:
     """
-    Process a single paper.
-
-    Args:
-        fname (str): The paper's filename.
-        pdf_file (Path): The path to the PDF file.
-        html_file (Path): The path to the HTML file.
-        json_file (Path): The path to the JSON file containing the extracted figures.
-        args (argparse.Namespace): The command-line arguments.
-
-    Returns:
-        Tuple[int, int]: The number of total pages and the number of recognized pages.
+    修改后的处理流程，适配新的 split_md_to_pages API
     """
-    total_pages = 0
-    num_recognized_pages = 0
+    # 跳过已处理的文件
+    outpath: Path = args.out / fname
+    if outpath.exists() and not args.recompute:
+        logger.info(f"{fname} already processed.")
+        return 0, 0
+
     try:
+        # 读取PDF
         pdf = pypdf.PdfReader(pdf_file)
         total_pages = len(pdf.pages)
         outpath: Path = args.out / fname
 
-        # 尝试多种编码方式读取HTML文件
-        encodings = ["utf-8", "utf-8-sig", "latin1", "cp1252", "gbk"]
-        content = None
-
-        for encoding in encodings:
-            try:
-                with open(html_file, "r", encoding=encoding) as f:
-                    content = f.read()
-                logger.info(f"Successfully read file with {encoding} encoding")
-                break
-            except UnicodeDecodeError:
-                continue
-
-        if content is None:
-            logger.error(f"Failed to read {html_file} with any encoding")
-            return total_pages, 0
-
+        # 解析HTML为markdown
         html = BeautifulSoup(
             htmlmin.minify(
-                content.replace("\xa0", " "),
+                open(html_file, "r", encoding="utf-8").read().replace("\xa0", " "),
                 remove_all_empty_space=True,
             ),
             features="html.parser",
         )
-
         doc = parse_latexml(html)
         if doc is None:
-            logger.info(f"Failed to parse LaTeXML for {fname}")
             return total_pages, 0
 
-        out, fig = format_document(doc, keep_refs=True)
+        # 转换为markdown
+        mmd_text, _ = format_document(doc, keep_refs=True)
+        mmd_file = args.markdown / f"{fname}.mmd"
+        with open(mmd_file, "w", encoding="utf-8") as f:
+            f.write(mmd_text)
+        logger.info(f"Markdown saved to {mmd_file}")
 
-        # 检查是否已经有 <Author_Information> 标签
-        if "<Author_Information>" not in out:
-            # 构建对应的 txt 文件路径
-            nametxt_dir = Path(
-                os.path.join(
-                    # "/data1/nzw/latex_pdf/generated_dataset/",
-                    "/home/ninziwei/lyj/nougat/__test_1",
-                    "src",
-                    fname,
-                    "nametxt",
-                )
-            )  # 根据实际路径调整
-            if nametxt_dir.exists():
-                for txt_file in os.listdir(nametxt_dir):
-                    txt_path = nametxt_dir / txt_file
-                    with open(txt_path, "r", encoding="utf-8") as txt_file:
-                        author_info = txt_file.read().strip()
-
-                    # 如果 txt 文件不为空，则插入作者信息
-                    if author_info:
-                        # 在 [ENDTITLE] 标签后插入作者信息
-                        out = out.replace(
-                            "[ENDTITLE]",
-                            f"[ENDTITLE]\n\n<Author_Information>{author_info}</Author_Information>",
-                        )
-                        logger.info(f"Inserted author information for {fname}")
-                    else:
-                        logger.info(f"Author info file not found for {fname}")
-
-        if json_file is None:
+        # 获取图表信息（新API需要figure_info字典）
+        figure_info = {}
+        if json_file is None or not json_file.exists():
+            # 调用 pdffigures 获取图表信息
             json_file = call_pdffigures(pdf_file, args.figure)
-        if json_file:
+
+        if json_file is not None and json_file.exists():
+            # 读取图表信息
             figure_info = json.load(open(json_file, "r", encoding="utf-8"))
         else:
-            figure_info = None
-        split = split_markdown(
-            out, pdf_file, figure_info=figure_info, doc_fig=fig, min_score=0.9
+            logger.error(f"No figure info found for {fname}")
+            return total_pages, 0
+
+        # 调用新的分页函数（返回格式：pages, coinside_pages, bad_pages）
+        pages, coinside_pages, bad_pages = split_markdown(
+            mmd_text, pdf=pdf, figure_info=figure_info  # 传入完整的figure_info字典
         )
-        if split is None:
-            return
-        pages, meta = split
-        num_recognized_pages = sum([len(p) > 0 for p in pages])
-        if all([len(p) == 0 for p in pages]):
-            return
+
+        # 保存分页结果
         os.makedirs(outpath, exist_ok=True)
         recognized_indices = []
         for i, content in enumerate(pages):
-            with (outpath / "meta.json").open("w", encoding="utf-8") as f:
-                f.write(json.dumps(meta))
-            if content:
-                if re.search(r"\[(?:\?\?(?:. )?)+\]", content):
-                    # there are wrongly parsed references in the page eg [??].
-                    continue
-                with (outpath / ("%02d.mmd" % (i + 1))).open(
-                    "w", encoding="utf-8"
-                ) as f:
+            if content.strip():
+                # 保存为页码命名的文件 (01.mmd, 02.mmd...)
+                # content = remove_invalid_figures(content, i, figure_info)
+                with open(outpath / f"{i+1:02d}.mmd", "w", encoding="utf-8") as f:
                     f.write(content)
                 recognized_indices.append(i)
+
+        # 生成页面图像（仅保存有内容的页）
         rasterize_paper(pdf_file, outpath, dpi=args.dpi, pages=recognized_indices)
-        if args.tesseract:
-            for i in recognized_indices:
-                ocr = pytesseract.image_to_string(
-                    Image.open((outpath / ("%02d.png" % (i + 1)))), lang="eng"
-                )
-                ocr = re.sub(r"\n+\s+?([^\s])", r"\n\n\1", ocr).strip()
-                with (outpath / ("%02d_OCR.txt" % (i + 1))).open(
-                    "w", encoding="utf-8"
-                ) as f_ocr:
-                    f_ocr.write(ocr)
+
+        return total_pages, len(recognized_indices)
+
     except Exception as e:
-        logger.error(e)
-
-    return total_pages, num_recognized_pages
-
-
-def find_pdf_file(pdf_dir, fname):
-    """递归查找指定文件夹中的 PDF 文件"""
-    for pdf_file in pdf_dir.rglob(f"{fname}.pdf"):
-        return pdf_file
-    return Path("")  # 使用空路径表示未找到文件
+        logger.error(f"Error processing {fname}: {str(e)}")
+        return total_pages, 0
 
 
 def process_htmls(args):
+    """
+    主要功能：将HTML文件转换为按页分割的markdown文件和对应的页面图像
+
+    输入：
+    - args.html: HTML文件目录，包含*.html文件
+    - args.pdfs: 对应的PDF文件目录
+    - args.figure: 包含每篇论文图表信息的JSON文件目录
+
+    输出目录结构：
+    args.out/
+    ├── paper1/              # 每篇论文一个目录
+    │   ├── meta.json       # 论文元数据
+    │   ├── 01.mmd         # 第1页的markdown内容
+    │   ├── 01.png         # 第1页的图像
+    │   ├── 01_OCR.txt     # (可选)第1页的OCR文本
+    │   ├── 02.mmd         # 第2页的markdown内容
+    │   ├── 02.png         # 第2页的图像
+    │   └── ...
+    └── paper2/
+        └── ...
+
+    args.figure/
+    └── paper1.json         # 论文中图表的位置和内容信息
+        {
+          "figures": [
+            {
+              "page": 1,
+              "regionBoundary": [x1, y1, x2, y2],
+              "caption": "Figure 1: ...",
+              "type": "Figure"
+            },
+            ...
+          ]
+        }
+    """
+    # 验证输入目录是否存在
     for input_dir in (args.pdfs, args.html):
         if not input_dir.exists() and not input_dir.is_dir():
             logger.error("%s does not exist or is no dir.", input_dir)
             return
+
+    # 获取所有HTML文件路径
     htmls: List[Path] = args.html.rglob("*.html")
+
+    # 创建输出目录
     args.out.mkdir(exist_ok=True)
     if args.markdown:
         args.markdown.mkdir(exist_ok=True)
 
+    # 使用进程池并行处理文件
     with ProcessPool(max_workers=args.workers) as pool:
         total_pages, total_pages_extracted = 0, 0
         tasks = {}
+
+        # 为每个HTML文件创建处理任务
         for j, html_file in enumerate(htmls):
             fname = html_file.stem
-            # pdf_file = args.pdfs / (fname + ".pdf")
-            pdf_file = find_pdf_file(args.pdfs, fname)
-
+            # 查找对应的PDF文件
+            pdf_file = args.pdfs / (fname + ".pdf")
             if not pdf_file.exists():
                 logger.info("%s pdf could not be found.", fname)
                 continue
+
+            # # 查找对应的图表信息JSON文件
             json_file = args.figure / (fname + ".json")
-            if not json_file.exists():
-                logger.info("%s figure json could not be found.", fname)
-                json_file = None
+            # if not json_file.exists():
+            #     logger.info("%s figure json could not be found.", fname)
+            #     json_file = None
+
+            # 调度任务到进程池，设置超时时间
             tasks[fname] = pool.schedule(
                 process_paper,
                 args=[fname, pdf_file, html_file, json_file, args],
                 timeout=args.timeout,
             )
 
+        # 收集处理结果
         for fname in tqdm(tasks):
             try:
                 res = tasks[fname].result()
                 if res is None:
                     logger.info("%s is faulty", fname)
                     continue
+
+                # 统计处理结果
                 num_pages, num_recognized_pages = res
                 total_pages += num_pages
                 total_pages_extracted += num_recognized_pages
+
+                # 记录每个文件的处理情况
                 logger.info(
                     "%s: %i/%i pages recognized. Percentage: %.2f%%",
                     fname,
@@ -224,6 +258,8 @@ def process_htmls(args):
                 )
             except TimeoutError:
                 logger.info("%s timed out", fname)
+
+    # 输出总体处理统计
     if total_pages > 0:
         logger.info(
             "In total: %i/%i pages recognized. Percentage: %.2f%%",

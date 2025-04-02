@@ -147,5 +147,9 @@ pdfs
 **/nougat-0.1.0-small
 **/gen_dataset/*.txt
 **/gen_dataset/*.json
-**/__test_1
+**/__test_*
 **/__test
+**/*.jsonl
+**/*.seek.map
+**/split_md_to_pages-old.py
+**/split_md_to_pages.desc

@@ -4,6 +4,7 @@ Copyright (c) Meta Platforms, Inc. and affiliates.
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
+
 from collections import deque
 import operator
 import itertools
@@ -260,9 +261,11 @@ class Staircase:
                 new_forward_n: float = self._forward_thres[n]
                 for i in range(
                     max(0, self._back_thres[n - 1]) if n - 1 >= 0 else int(last),
-                    min(self.domain, self._forward_thres[n + 1])
-                    if n + 2 < self.classes
-                    else self.domain - 1,
+                    (
+                        min(self.domain, self._forward_thres[n + 1])
+                        if n + 2 < self.classes
+                        else self.domain - 1
+                    ),
                 ):
                     thresholds.array[n + 1] = i + 0.5
                     Gi = step_impurity(

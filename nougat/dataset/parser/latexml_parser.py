@@ -120,8 +120,7 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
                 if sv.match(".ltx_tag_section", child):
                     child.string = child.string.upper()
                 elif sv.match(".ltx_tag_subsection", child):
-                    # child.string = child.string.upper()
-                    child.string = ""
+                    child.string = child.string.upper()
                 parse_latexml_children(child, parent)
             elif "ltx_tag_bibitem" in classes:
                 parse_latexml_children(child, parent.append(SpanElement()))
@@ -357,24 +356,41 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
             if "id" in child.attrs:
                 figure.id = child.attrs["id"]
             parse_latexml_children(child, figure)
-        elif sv.match("figure.ltx_figure", child):
-            figure = parent.append(Figure())
-
-            # 从HTML的data-coords属性直接获取坐标
-            if "data-coords" in child.attrs:
-                coords = list(map(float, child["data-coords"].split(",")))
-                figure.coords = coords
-
-            # 保留原有ID和标题处理
+        elif sv.match("figure.ltx_figure", child) or sv.match("span.ltx_figure", child):
+            # 检测是否包含算法特征
+            is_algorithm = child.find(class_="ltx_listing") is not None
+            if is_algorithm:
+                figure = parent.append(Algorithm())
+            else:
+                figure = parent.append(Figure())
+                # 从HTML的data - coords属性直接获取坐标
+                if "data-coords" in child.attrs:
+                    coords = list(map(float, child["data-coords"].split(",")))
+                    figure.coords = coords
             if "id" in child.attrs:
                 figure.id = child.attrs["id"]
             parse_latexml_children(child, figure)
-
-        # elif sv.match("figure.ltx_figure", child):
-        #     figure = parent.append(Figure())
-        #     if "id" in child.attrs:
-        #         figure.id = child.attrs["id"]
-        #     parse_latexml_children(child, figure)
+        elif sv.match(".ltx_float_algorithm", child):
+            alg = parent.append(Algorithm())
+            if "id" in child.attrs:
+                alg.id = child.attrs["id"]
+            parse_latexml_children(child, alg)
+            # alg = parent.find_parent(Figure)
+            # if alg is not None:
+            #     if alg.caption is None:
+            #         alg.caption = Paragraph(parent=alg)
+            #     with open("res.txt", "w", encoding="utf-8") as f:
+            #         f.write("111")
+            #     # 添加算法标题标签
+            #     alg.caption.append(TextElement(content="[ALGORITHM_TITLE]"))
+            #     parse_latexml_children(child, alg.caption)
+            #     alg.caption.append(TextElement(content="[ENDALGORITHM_TITLE]"))
+            # else:
+            #     with open("res.txt", "w", encoding="utf-8") as f:
+            #         f.write(")000")
+            #     printerr(
+            #         "Algorithm caption outside figure environment", file=sys.stderr
+            #     )
         elif sv.match("figure.ltx_float", child):
             parse_latexml_children(child, parent)
         elif sv.match(".ltx_float_caption, .ltx_caption", child):
@@ -399,7 +415,6 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
                     )
                 elif isinstance(parent_elem, Figure):
                     parent_elem.caption.append(TextElement(content="[FIGURE_TITLE]"))
-                    print("figure caption" + child.get_text())
                     parse_latexml_children(child, parent_elem.caption)
                     parent_elem.caption.append(
                         TextElement(content="[ENDFIGURE_TITLE]\n\n")
@@ -408,24 +423,18 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
                 # 如果找不到相应父元素,作为普通段落处理
                 para = parent.append(Paragraph())
                 parse_latexml_children(child, para)
-        # elif sv.match(".ltx_listing", child):
-        #     alg = parent.append(Algorithm())
-        #         # 查找算法标题
-        #     title_elem = child.find(class_="ltx_title")
-        #     if title_elem:
-        #         alg.title = SpanElement()
-        #         parse_latexml_children(title_elem, alg.title)
-        #     parse_latexml_children(child, alg)
-        # elif sv.match(".ltx_listing", child):
-        #     alg = parent.append(Algorithm())
-        #     parse_latexml_children(child, alg)
         elif sv.match(".ltx_listing", child):
-            alg = parent.append(Algorithm())
-            # 解析算法内容
-            for line in child.find_all(class_="ltx_listingline"):
-                line_elem = alg.add_line(Element())
-                parse_latexml_children(line, line_elem)
-
+            # 检查是否已经位于算法容器中
+            if not isinstance(parent, Algorithm):
+                # 若外围未正确创建算法容器，则在此创建
+                alg = parent.append(Algorithm())
+                # with open("res.txt", "w", encoding="utf-8") as f:
+                #     f.write("222")
+                parse_latexml_children(child, alg)
+            else:
+                for line in child.find_all(class_="ltx_listingline"):
+                    line_elem = parent.add_line(Element())
+                    parse_latexml_children(line, line_elem)
         elif sv.match(".ltx_listingline", child):
             alg = parent.find_parent(Algorithm)
             if alg is not None:
@@ -470,19 +479,6 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
                 )
                 para = parent.append(Paragraph())
                 parse_latexml_children(child, para)
-        elif sv.match(".ltx_float_algorithm", child):
-            alg = parent.find_parent(Figure)
-            if alg is not None:
-                if alg.caption is None:
-                    alg.caption = Paragraph(parent=alg)
-                # 添加算法标题标签
-                alg.caption.append(TextElement(content="[ALGORITHM_TITLE]"))
-                parse_latexml_children(child, alg.caption)
-                alg.caption.append(TextElement(content="[ENDALGORITHM_TITLE]"))
-            else:
-                printerr(
-                    "Algorithm caption outside figure environment", file=sys.stderr
-                )
         elif sv.match(".ltx_break", child):
             parent.append(Author())
 

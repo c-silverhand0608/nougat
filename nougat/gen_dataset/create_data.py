@@ -3,12 +3,11 @@ import shutil
 from pathlib import Path
 from unzip import extract_zip
 from convert_tex_to_html import convert_tex_to_html
-from extract_names_from_tex import extract_names_from_tex
 from extract_pdf_images import extract_images
 from inject_coords import inject_coordinates
 
 # target_root = "/data1/nzw/latex_pdf/generated_dataset"
-target_root = "/home/ninziwei/lyj/nougat/__test_1"
+target_root = "/home/ninziwei/lyj/nougat/__test_new"
 
 
 def walk_and_create(zip_file):
@@ -60,21 +59,20 @@ def walk_and_create(zip_file):
     return False
 
 
-walk_and_create("/home/ninziwei/lyj/nougat/__test_1/src/2402.00041.zip")
+# walk_and_create("/home/ninziwei/lyj/nougat/__test_new/src/2402.00041.zip")
+walk_and_create("/home/ninziwei/lyj/nougat/__test_new/src/2303.00058.zip")
+# walk_and_create("/home/ninziwei/lyj/nougat/__test_new/src/2303.00065.zip")
+
 """
 python extract_pdf_images.py \
 /home/ninziwei/lyj/nougat/__test/2402.00041.pdf \
 /home/ninziwei/lyj/nougat/__test/2402.00041/extracted_images
-"""
 
-"""
 python inject_coords.py \
 /home/ninziwei/lyj/nougat/__test/2402.00041/html/2402.00041.html \
 /home/ninziwei/lyj/nougat/__test/2402.00041/extracted_images/image_mapping.json \
 /home/ninziwei/lyj/nougat/__test/2402.00041/html/2402.00041_with_coords.html 
-"""
 
-"""
 python extract_name_from_tex.py \
 /home/ninziwei/lyj/nougat/__test/2402.00041 \
 /home/ninziwei/lyj/nougat/__test/2402.00041/nametxt

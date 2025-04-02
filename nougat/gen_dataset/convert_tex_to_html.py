@@ -52,9 +52,10 @@ def convert_tex_to_html(source_directory, target_directory, timeout=600):
                 )
 
                 # 使用 latexml 将 tex 文件转换为 xml 文件
-                latex_command = (
-                    f"latexml {tex_file_path} --dest={xml_file_path} --includestyles"
-                )
+                print(55, xml_file_path)
+                command = f"latexml {tex_file_path} --dest={xml_file_path} --includestyles"
+                print(command)
+                latex_command = (command)
                 try:
                     # 使用 subprocess.run 并设置 timeout 参数
                     subprocess.run(
