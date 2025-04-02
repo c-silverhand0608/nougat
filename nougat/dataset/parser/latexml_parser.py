@@ -363,10 +363,6 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
                 figure = parent.append(Algorithm())
             else:
                 figure = parent.append(Figure())
-                # 从HTML的data - coords属性直接获取坐标
-                if "data-coords" in child.attrs:
-                    coords = list(map(float, child["data-coords"].split(",")))
-                    figure.coords = coords
             if "id" in child.attrs:
                 figure.id = child.attrs["id"]
             parse_latexml_children(child, figure)
@@ -375,22 +371,6 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
             if "id" in child.attrs:
                 alg.id = child.attrs["id"]
             parse_latexml_children(child, alg)
-            # alg = parent.find_parent(Figure)
-            # if alg is not None:
-            #     if alg.caption is None:
-            #         alg.caption = Paragraph(parent=alg)
-            #     with open("res.txt", "w", encoding="utf-8") as f:
-            #         f.write("111")
-            #     # 添加算法标题标签
-            #     alg.caption.append(TextElement(content="[ALGORITHM_TITLE]"))
-            #     parse_latexml_children(child, alg.caption)
-            #     alg.caption.append(TextElement(content="[ENDALGORITHM_TITLE]"))
-            # else:
-            #     with open("res.txt", "w", encoding="utf-8") as f:
-            #         f.write(")000")
-            #     printerr(
-            #         "Algorithm caption outside figure environment", file=sys.stderr
-            #     )
         elif sv.match("figure.ltx_float", child):
             parse_latexml_children(child, parent)
         elif sv.match(".ltx_float_caption, .ltx_caption", child):

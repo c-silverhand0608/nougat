@@ -206,15 +206,15 @@ def format_element(
     # 修改Figure处理部分
     if isinstance(element, Figure):
         # 提取坐标信息
-        coords_str = (
-            ",".join(f"{c:.4f}" for c in element.coords)
-            if hasattr(element, "coords")
-            else ""
-        )
+        # coords_str = (
+        #     ",".join(f"{c:.4f}" for c in element.coords)
+        #     if hasattr(element, "coords")
+        #     else ""
+        # )
 
         parts = [
             f"\n[FIGURE:{element.id}]\n" if element.id else "[FIGURE]\n",
-            f"[FIGURE_COORDS]{coords_str}[ENDFIGURE_COORDS]\n",
+            # f"[FIGURE_COORDS]{coords_str}[ENDFIGURE_COORDS]\n",
         ]
 
         # 添加标题内容（关键修复）

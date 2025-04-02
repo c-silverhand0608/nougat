@@ -21,6 +21,7 @@ import pytesseract
 from nougat.dataset.split_md_to_pages import *
 from nougat.dataset.parser.html2md import *
 from nougat.dataset.pdffigures import call_pdffigures
+from nougat.dataset.inject_coords_to_mmd import inject_coordinates
 
 logging.basicConfig()
 logger = logging.getLogger()
@@ -73,11 +74,6 @@ def build_page_to_figs(fig_info):
     return page_map
 
 
-def read_file_with_auto_encoding(file_path):
-    result = from_path(file_path).best()
-    return result.text
-
-
 def process_paper(
     fname: str,
     pdf_file: Path,
@@ -112,15 +108,9 @@ def process_paper(
         if doc is None:
             return total_pages, 0
 
-        # 转换为markdown
-        mmd_text, _ = format_document(doc, keep_refs=True)
-        mmd_file = args.markdown / f"{fname}.mmd"
-        with open(mmd_file, "w", encoding="utf-8") as f:
-            f.write(mmd_text)
-        logger.info(f"Markdown saved to {mmd_file}")
-
         # 获取图表信息（新API需要figure_info字典）
         figure_info = {}
+        # 创建图表信息的JSON文件
         if json_file is None or not json_file.exists():
             # 调用 pdffigures 获取图表信息
             json_file = call_pdffigures(pdf_file, args.figure)
@@ -131,6 +121,22 @@ def process_paper(
         else:
             logger.error(f"No figure info found for {fname}")
             return total_pages, 0
+
+        # 转换为markdown
+        mmd_text, _ = format_document(doc, keep_refs=True)
+        # 处理图表信息
+        mmd_text = inject_coordinates(
+            mmd_text=mmd_text,
+            fig_info=figure_info["figures"],
+            page_width=pdf.pages[0].mediabox.width,
+            page_height=pdf.pages[0].mediabox.height,
+        )
+        # 保存原始的markdown文本（可选）
+        if args.markdown:
+            mmd_file = args.markdown / f"{fname}.mmd"
+            with open(mmd_file, "w", encoding="utf-8") as f:
+                f.write(mmd_text)
+            logger.info(f"Markdown saved to {mmd_file}")
 
         # 调用新的分页函数（返回格式：pages, coinside_pages, bad_pages）
         pages, coinside_pages, bad_pages = split_markdown(
@@ -222,11 +228,8 @@ def process_htmls(args):
                 logger.info("%s pdf could not be found.", fname)
                 continue
 
-            # # 查找对应的图表信息JSON文件
+            # 设置对应的图表信息JSON文件（尚未创建）
             json_file = args.figure / (fname + ".json")
-            # if not json_file.exists():
-            #     logger.info("%s figure json could not be found.", fname)
-            #     json_file = None
 
             # 调度任务到进程池，设置超时时间
             tasks[fname] = pool.schedule(
