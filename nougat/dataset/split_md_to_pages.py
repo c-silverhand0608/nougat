@@ -21,6 +21,15 @@ from string_matcher import get_char_match_score
 from rasterize import rasterize_paper
 
 
+def debug(*args, **kwargs):
+    """
+    Debug function to print messages with a specific format.
+    """
+    # Uncomment the next line to enable debug printing
+    # print("DEBUG:", *args, **kwargs)
+    pass
+
+
 def get_doc_text(doc):
     """
     先清洗掉所有 [TABLE] 和 [ENDTABLE] 之间，
@@ -141,9 +150,9 @@ def split_markdown(
                 continue
 
             if "must be allocated to distinct" in line:
-                print(130, line)
-                print(131, strip_line)
-                print(strip_line in strip_doc_text)
+                debug(130, line)
+                debug(131, strip_line)
+                debug(strip_line in strip_doc_text)
 
             # 如果行长度大于20，则可以用完美匹配的方式直接判断是否有效
             if len(strip_line) > 20:
@@ -187,7 +196,7 @@ def split_markdown(
             ]
             # caption_scores = [get_char_match_score(strip_caption_line, strip_line) for strip_caption_line in candid_caption_lines]
             if "must be allocated to distinct" in line:
-                print(max(doc_scores))
+                debug(max(doc_scores))
 
             if len(strip_line) > 30:
                 if doc_scores and max(doc_scores) > 0.5:
@@ -245,7 +254,7 @@ def split_markdown(
             for doc_line in strip_doc_lines[end_pointer:end_window_end]
         ]
 
-        # print(264, max(end_scores), end_pointer, end_window_end, end_line)
+        debug(264, max(end_scores), end_pointer, end_window_end, end_line)
         if end_scores and max(end_scores) > 0.8:
             end_idx = end_pointer + np.argmax(end_scores)
             page_end_positions.append(end_idx)
@@ -254,11 +263,11 @@ def split_markdown(
             page_end_positions.append(-2)
             end_window_size += min_window_size
 
-        print(231, page_start_positions[-1], start_line)
-        print(232, page_end_positions[-1], end_line)
+        debug(231, page_start_positions[-1], start_line)
+        debug(232, page_end_positions[-1], end_line)
 
-    print(272, page_start_positions)
-    print(273, page_end_positions)
+    debug(272, page_start_positions)
+    debug(273, page_end_positions)
 
     # 确定分割位置
     last_position = 0
@@ -269,7 +278,7 @@ def split_markdown(
     for i, (end_idx, start_idx) in enumerate(
         zip(page_end_positions[:-1], page_start_positions[1:])
     ):
-        # print(282, end_idx, start_idx)
+        debug(282, end_idx, start_idx)
         if end_idx == -1 and start_idx == -1:
             split_positions.append(last_position)
         elif end_idx == -2 and start_idx == -2:
@@ -291,14 +300,14 @@ def split_markdown(
 
     # 根据分割位置拆分文档
     split_positions = [0] + split_positions + [len(doc_lines)]
-    print(298, split_positions)
+    debug(298, split_positions)
     doc_text_by_pages = []
     for i in range(len(split_positions) - 1):
         doc_text_by_pages.append(
             "\n".join(doc_lines[split_positions[i] : split_positions[i + 1] + 1])
         )
 
-    print(304, len(doc_text_by_pages))
+    debug(304, len(doc_text_by_pages))
     return doc_text_by_pages, coinside_pages, bad_pages
 
 
@@ -338,7 +347,7 @@ def use_split_markdown():
 
     pages, coinside_pages, bad_pages = split_markdown(md, pdf, fig_info)
 
-    print(341, len(pages))
+    debug(341, len(pages))
     with open(f"{args.out}/{fname}.txt", "w", encoding="utf-8") as f:
         for page in pages:
             f.write(page)

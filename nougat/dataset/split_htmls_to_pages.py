@@ -113,9 +113,9 @@ def process_paper(
         # 创建图表信息的JSON文件
         if json_file is None or not json_file.exists():
             # 调用 pdffigures 获取图表信息
-            json_file = call_pdffigures(pdf_file, args.figure)
+            json_file = Path(call_pdffigures(pdf_file, args.figure))
 
-        if json_file is not None and json_file.exists():
+        if json_file and json_file.exists():
             # 读取图表信息
             figure_info = json.load(open(json_file, "r", encoding="utf-8"))
         else:

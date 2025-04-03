@@ -1,12 +1,12 @@
 import re
 from bs4 import BeautifulSoup
+from nougat.dataset.patches.latex_to_html import latex_to_html
 
 
 def parse_bbl(bbl_file) -> BeautifulSoup:
     with open(bbl_file, "r", encoding="utf-8") as f:
         content = f.read()
 
-    print(bbl_file)
     # 更精确的正则表达式匹配模式
     items = re.findall(
         r"\\bibitem(?:\[\{(.*?)\}\])?\{(.*?)\}(.*?)(?=\\bibitem|\\end{thebibliography})",
@@ -44,13 +44,7 @@ def parse_bbl(bbl_file) -> BeautifulSoup:
         li.append(tag)
 
         # 内容处理（含LaTeX转换）
-        entry = re.sub(r"\s+", " ", entry.strip())  # 合并空白
-        entry = re.sub(
-            r"\\emph{(.*?)}", r'<em class="ltx_emph ltx_font_italic">\1</em>', entry
-        )
-        entry = re.sub(r"{\\&}", "&amp;", entry)  # 特殊字符处理
-        entry = re.sub(r"{\\\'I}", "Í", entry)
-        entry = re.sub(r'{\\"o}', "ö", entry)
+        entry = latex_to_html(entry)
 
         # 创建带HTML格式的内容块
         entry_span = soup.new_tag("span", **{"class": "ltx_bibblock"})
@@ -81,7 +75,7 @@ def fix_bibliography(html_file, bbl_file):
 
     # 查找并替换整个bibliography
     old_section = soup.find("section", {"class": "ltx_bibliography"})
-    print("\n\n")
+
     if not old_section:
         # 如果没有找到旧的bibliography部分，则报错！
         raise ValueError("No existing bibliography section found.")

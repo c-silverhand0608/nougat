@@ -101,20 +101,6 @@ class LatexMath(Math):
 
 
 @dataclass
-class Author:
-    content: str = ""
-
-    @property
-    def plaintext(self):
-        # 清理内容中的多余空白和换行
-        lines = [line.strip() for line in self.content.split("\n") if line.strip()]
-        return " ".join(lines)
-
-    def append(self, child: "Element"):
-        raise Exception(f"Cannot append elements to {self.__class__.__name__}")
-
-
-@dataclass
 class Link(Element):
     target: str = None
 
@@ -127,6 +113,38 @@ class InlineRef(Element):
         return {
             "target": self.target,
         }
+
+
+@dataclass
+class Author(Element):
+    name: str = None
+    note: str = None
+
+    def as_dict(self):
+        return {
+            "name": self.name,
+            "note": self.note,
+        }
+
+
+@dataclass
+class AuthorList(Element):
+    authors: List["Author"] = field(default_factory=list)
+
+    def add_author(self, author: Author):
+        self.authors.append(author)
+        author.parent = self
+        return author
+
+    def as_dict(self):
+        return {
+            "authors": [author.as_dict() for author in self.authors],
+        }
+
+
+@dataclass
+class AuthorNote(Element):
+    content: str = None
 
 
 @dataclass
@@ -148,7 +166,6 @@ class Reference:
     """
 
     title: Element = None
-    authors: List[Author] = field(default_factory=list)
     ids: Dict[str, str] = field(default_factory=dict)
     date: str = None
     url: str = None
@@ -158,7 +175,6 @@ class Reference:
     def as_dict(self):
         return {
             "title": self.title.plaintext,
-            "authors": [asdict(auth) for auth in self.authors],
             "ids": self.ids,
             "date": self.date,
             "url": self.url,

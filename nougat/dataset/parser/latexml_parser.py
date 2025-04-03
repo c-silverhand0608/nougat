@@ -63,12 +63,6 @@ def _detach_selected(element: BeautifulSoup, selector: str) -> None:
         elem.extract()
 
 
-def parse_latexml_authors(ltx_authors: BeautifulSoup) -> List[Author]:
-    authors = Paragraph()
-    parse_latexml_children(ltx_authors, authors)
-    return authors
-
-
 def parse_latexml_citations(cite: BeautifulSoup, parent: Element) -> None:
     """
     Parses LaTeXML citations and appends them as children to the given parent element.
@@ -197,21 +191,39 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
                     file=sys.stderr,
                 )
         elif sv.match(
-            ".ltx_bibblock, .ltx_role_author, .ltx_contact, .ltx_role_email, .ltx_role_affiliation",
+            # ".ltx_bibblock, .ltx_role_author, .ltx_contact, .ltx_role_email, .ltx_role_affiliation",
+            ".ltx_bibblock, .ltx_contact, .ltx_role_email, .ltx_role_affiliation",
             child,
         ):
             parse_latexml_children(child, parent.append(SpanElement()))
-            parent.append(TextElement(content="\n"))
+        elif sv.match(".ltx_authors", child):
+            author_list = parent.append(AuthorList())
+            parse_latexml_children(child, author_list)
+        elif sv.match(".ltx_creator .ltx_role_author", child):
+            author = Author()
+            author_list = parent.find_parent(AuthorList)
+            if author_list is not None:
+                author_list.add_author(author)
+            else:
+                printerr("Unable to find AuthorList to append author", file=sys.stderr)
+            parse_latexml_children(child, author)
+        elif sv.match(".ltx_author_notes", child):
+            author_note = parent.append(AuthorNote())
+            parse_latexml_children(child, author_note)
         elif sv.match(
-            ".ltx_authors, .ltx_personname, .ltx_role_creation.ltx_date, .ltx_engrafo_author_notes, .ltx_author_notes, .ltx_date.ltx_role_creation",
+            # ".ltx_authors, .ltx_personname, .ltx_role_creation.ltx_date, .ltx_engrafo_author_notes, .ltx_author_notes, .ltx_date.ltx_role_creation",
+            ".ltx_personname, .ltx_role_creation.ltx_date, .ltx_engrafo_author_notes, .ltx_date.ltx_role_creation",
             child,
         ):
-            parse_latexml_children(child, parent.append(Paragraph()))
-            parent.append(TextElement(content="\n"))
+            # parse_latexml_children(child, parent.append(Paragraph()))
+            # parent.append(TextElement(content="\n"))
+            parse_latexml_children(child, parent.append(SpanElement()))
         elif sv.match(
             ".ltx_author_before, .ltx_role_pubyear, .ltx_role_pagerange", child
         ):
-            pass
+            # pass
+            parse_latexml_children(child, parent.append(SpanElement()))
+            # parent.append(TextElement(content="\n"))
         elif sv.match("h1.ltx_title_document", child):
             doc = parent.find_parent(Document)
             if doc is not None:
@@ -406,8 +418,6 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
             if not isinstance(parent, Algorithm):
                 # 若外围未正确创建算法容器，则在此创建
                 alg = parent.append(Algorithm())
-                # with open("res.txt", "w", encoding="utf-8") as f:
-                #     f.write("222")
                 parse_latexml_children(child, alg)
             else:
                 for line in child.find_all(class_="ltx_listingline"):
@@ -457,9 +467,6 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
                 )
                 para = parent.append(Paragraph())
                 parse_latexml_children(child, para)
-        elif sv.match(".ltx_break", child):
-            parent.append(Author())
-
         elif sv.match(".ltx_abstract, .ltx_acknowledgements", child):
             abstract = parent.append(Section())
             parse_latexml_children(child, abstract)

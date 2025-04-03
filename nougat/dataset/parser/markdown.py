@@ -116,31 +116,6 @@ def format_element(
         else:
             return [element.content]
 
-    if isinstance(element, Author):
-        if not element.content.strip():
-            return []
-
-        content = element.plaintext
-        if latex_env:
-            content = latex_escape(content)
-
-        # 确保内容被正确包装在标签中
-        return [f"[AUTHOR_INFORMATION]{content}[ENDAUTHOR_INFORMATION]"]
-
-    # 在处理作者列表的部分
-    if isinstance(element, Document):
-        parts = []
-        if element.authors:
-            author_parts = []
-            for i, author in enumerate(element.authors):
-                author_text = format_element(author, keep_refs, latex_env)
-                if author_text:
-                    author_parts.extend(author_text)
-                    if i < len(element.authors) - 1:
-                        author_parts.append(" & ")
-            parts.extend(author_parts)
-            parts.append("\n")
-
     if isinstance(element, Bold):
         parts = format_children(element, keep_refs, latex_env)
         if element.find_parent(Algorithm) is not None:
@@ -205,16 +180,8 @@ def format_element(
 
     # 修改Figure处理部分
     if isinstance(element, Figure):
-        # 提取坐标信息
-        # coords_str = (
-        #     ",".join(f"{c:.4f}" for c in element.coords)
-        #     if hasattr(element, "coords")
-        #     else ""
-        # )
-
         parts = [
             f"\n[FIGURE:{element.id}]\n" if element.id else "[FIGURE]\n",
-            # f"[FIGURE_COORDS]{coords_str}[ENDFIGURE_COORDS]\n",
         ]
 
         # 添加标题内容（关键修复）
@@ -229,24 +196,6 @@ def format_element(
         parts.append("[ENDFIGURE]\n\n")
         return parts
 
-    # if isinstance(element, Figure):
-    #     parts = format_element(element.caption, keep_refs)
-    #     print("[FIGURE%s]\n"
-    #             % (str(uuid4())[:5] if element.id is None else ":" + str(element.id)))
-    #     remove_trailing_whitespace(parts)
-    #     return (
-    #         [
-    #             "[FIGURE%s]\n"
-    #             % (str(uuid4())[:5] if element.id is None else ":" + str(element.id))
-    #         ]
-    #         + parts
-    #         + ["\n[ENDFIGURE]\n"]
-    #         #  [
-    #         #      "[FIGURE%s]\n"
-    #         #     % (str(uuid4())[:5] if element.id is None else ":" + str(element.id))
-    #         #  ] +
-    #         #  ["\n[ENDFIGURE]\n"] + parts + ["\n"]
-    #     )
     if isinstance(element, SectionHeader):
         parts = ["# "]
         if element.id:
@@ -263,12 +212,12 @@ def format_element(
         if is_empty(children_parts):
             return []
         if element.header:
-            parts = [f"\n\n{'#'*element.hnum} "]
+            parts = [f"\n[SUBTITLE]{'#'*element.hnum} "]
             _, title, _ = leading_trailing_whitespace(
                 "".join(format_element(element.header, keep_refs))
             )
             parts.append(title)
-            parts.append("\n\n")
+            parts.append("[ENDSUBTITLE]\n")
         else:
             parts = []
         return ["[TEXT]" + "".join(parts + children_parts) + "[ENDTEXT]\n"]
@@ -343,6 +292,7 @@ def format_element(
             append = "`" if element.inline else "```\n"
             parts.append(append)
         return ["[ALGORITHM]\n" + caption + "".join(parts) + "[ENDALGORITHM]\n\n"]
+
     if isinstance(element, DefinitionList):
         parts = ["\n"]
         if element.header is not None:
@@ -356,6 +306,7 @@ def format_element(
             parts.extend(items)
             parts.append("\n")
         return parts
+
     if isinstance(element, Definition):
         parts = []
         if element.term is not None:
@@ -371,6 +322,7 @@ def format_element(
         if parts:
             parts.append("\n")
         return parts
+
     if isinstance(element, LatexMath):
         parts = []
         if not element.inline:
@@ -379,6 +331,7 @@ def format_element(
         if not element.inline:
             parts.append("\n\n")
         return parts
+
     if isinstance(element, (Superscript, Subscript)):
         content = element.plaintext
         if content.strip().isdigit():
@@ -388,6 +341,19 @@ def format_element(
             return [content.translate(script_map)]
         else:
             return format_children(element, keep_refs)
+
+    if isinstance(element, AuthorNote):
+        parts = format_children(element, keep_refs)
+        return "\n[AUTHOR_NOTE]" + "".join(parts) + "[ENDAUTHOR_NOTE]"
+
+    if isinstance(element, AuthorList):
+        parts = format_children(element, keep_refs)
+        return "[AUTHOR_INFO]\n" + "".join(parts) + "\n[ENDAUTHOR_INFO]\n\n"
+
+    if isinstance(element, Author):
+        parts = format_children(element, keep_refs)
+        return parts
+
     if isinstance(element, InlineRef):
         parts = format_children(element, keep_refs)
         return parts
