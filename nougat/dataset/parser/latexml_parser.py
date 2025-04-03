@@ -191,8 +191,6 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
                         f"Missing reference detected for placeholder: {placeholder}",
                         file=sys.stderr,
                     )
-                    # 这里可以选择记录错误而不是引发异常
-                    # parent.append(TextElement(content="[Missing Reference]"))
             except Exception as e:
                 printerr(
                     f"Error processing missing citation or label: {placeholder}, {e}",

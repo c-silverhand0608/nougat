@@ -21,7 +21,7 @@ import pytesseract
 from nougat.dataset.split_md_to_pages import *
 from nougat.dataset.parser.html2md import *
 from nougat.dataset.pdffigures import call_pdffigures
-from nougat.dataset.inject_coords_to_mmd import inject_coordinates
+from nougat.dataset.patches.inject_coords_to_mmd import inject_coordinates
 
 logging.basicConfig()
 logger = logging.getLogger()
@@ -124,7 +124,7 @@ def process_paper(
 
         # 转换为markdown
         mmd_text, _ = format_document(doc, keep_refs=True)
-        # 处理图表信息
+        # 注入坐标
         mmd_text = inject_coordinates(
             mmd_text=mmd_text,
             fig_info=figure_info["figures"],

@@ -459,14 +459,6 @@ def format_document(
 
     text = text.replace("\xa0", " ")
 
-    text = re.sub(
-        r"<Author_information>\s*&\s*<Author_information>",
-        r"<Author_information> & <Author_information>",
-        text,
-    )
-    text = re.sub(r"<Author_information>\s+", r"<Author_information>", text)
-    text = re.sub(r"\s+<Author_information>", r"<Author_information>", text)
-
     # 清理表格标题标签
     text = re.sub(r"\[TABLE_TITLE\]\s+", "[TABLE_TITLE]", text)
     text = re.sub(r"\s+\[ENDTABLE_TITLE\]", "[ENDTABLE_TITLE]", text)

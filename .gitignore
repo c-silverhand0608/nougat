@@ -146,6 +146,8 @@ pdfs
 
 **/nougat/**/*.txt
 **/nougat/**/*.json
-**/__test*
+**/nougat/**/test.py
+**/__test_*
+**/__test
 **/*.jsonl
 **/*.seek.map

@@ -15,10 +15,28 @@ def contains_documentclass(tex_file_path):
     return False
 
 
+def remove_comments(tex_content):
+    """删除 LaTeX 文本中的注释"""
+
+    # 删除以 % 开头的注释行（允许空格/Tab），包括空行
+    tex_content = re.sub(r"(?m)^\s*%.*(?:\n|$)", "", tex_content)
+
+    # 删除行尾注释（非转义 %），包括可能没有 \n 的最后一行
+    tex_content = re.sub(r"(?<!\\)%.*", "", tex_content)
+
+    # 清理空行
+    tex_content = re.sub(r"\n\s*\n", "\n", tex_content)
+
+    return tex_content
+
+
 def preprocess_tex(tex_file_path):
     """预处理 tex 文件"""
     with open(tex_file_path, "r", encoding="utf-8", errors="ignore") as file:
         content = file.read()
+
+    # 删除注释
+    content = remove_comments(content)
 
     author_pattern = re.compile(r"\\author\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}")
     title_pattern = re.compile(r"\\title\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}")
@@ -53,9 +71,11 @@ def convert_tex_to_html(source_directory, target_directory, timeout=600):
 
                 # 使用 latexml 将 tex 文件转换为 xml 文件
                 print(55, xml_file_path)
-                command = f"latexml {tex_file_path} --dest={xml_file_path} --includestyles"
+                command = (
+                    f"latexml {tex_file_path} --dest={xml_file_path} --includestyles"
+                )
                 print(command)
-                latex_command = (command)
+                latex_command = command
                 try:
                     # 使用 subprocess.run 并设置 timeout 参数
                     subprocess.run(
