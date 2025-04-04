@@ -2,7 +2,7 @@ import os
 import re
 import shutil
 from pathlib import Path
-from unzip import extract_files_from_tar_zip
+from unzip import extract_files_from_tar_zip, extract_files_from_zip
 from convert_tex_to_html import convert_tex_to_html
 from bs4 import BeautifulSoup
 from nougat.dataset.patches.fix_bibliography import fix_bibliography
@@ -76,7 +76,7 @@ def walk_and_create(zip_file):
     # copy pdf&zip and unzip
     if not os.path.exists(target_zip_file):
         shutil.copy(zip_file, target_zip_file)
-    extract_files_from_tar_zip(target_zip_file)
+    extract_files_from_zip(target_zip_file)
     if not os.path.exists(target_pdf_file):
         shutil.copy(pdf_file, target_pdf_file)
     print(f"unzip {target_zip_file} done")
@@ -93,8 +93,11 @@ def walk_and_create(zip_file):
         print(f"⚠️ No tex file in {target_pdf_dir}!")
         return False
 
+    # preprocess tex file
+    preprocess_tex(target_tex_file)
+
     try:
-        # convert_tex_to_html(target_tex_file, target_html_file, target_xml_file)
+        convert_tex_to_html(target_tex_file, target_html_file, target_xml_file)
         check_bib_and_fix(target_html_file, target_pdf_dir)
         print(f"convert {target_tex_file} to html done")
     except Exception as e:

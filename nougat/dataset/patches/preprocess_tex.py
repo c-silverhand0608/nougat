@@ -18,8 +18,8 @@ def remove_comments(tex_content):
 
 def remove_useless_items(tex_content):
     # 如果文件中不包含 \maketitle，则删除 \author, \title, \date 等内容
-    if not re.search(r"\\maketitle", tex_content):
-        return
+    if re.search(r"\\maketitle", tex_content):
+        return tex_content
 
     author_pattern = re.compile(r"\\author\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}")
     title_pattern = re.compile(r"\\title\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}")
@@ -48,5 +48,5 @@ def preprocess_tex(tex_file_path):
 
 
 if __name__ == "__main__":
-    tex_file_path = "path/to/your/texfile.tex"  # 替换为你的文件路径
+    tex_file_path = "/home/ninziwei/lyj/nougat/__test_1/src/2303.00065/root.tex"  # 替换为你的文件路径
     preprocess_tex(tex_file_path)

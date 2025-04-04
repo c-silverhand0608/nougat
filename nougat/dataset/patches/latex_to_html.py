@@ -224,6 +224,22 @@ def _replace_special_chars(text: str) -> str:
     text = re.sub(r"{\\&}", "&amp;", text)
     text = re.sub(r"{\\\'I}", "Í", text)
     text = re.sub(r'{\\"o}', "ö", text)
+    text = re.sub(r'{\\"a}', "ä", text)
+    text = re.sub(r"{\\\'u}", "ú", text)
+    text = re.sub(r"{\\\'e}", "é", text)
+    text = re.sub(r"{\\\'a}", "á", text)
+    text = re.sub(r"{\\\'o}", "ó", text)
+    text = re.sub(r"{\\\'i}", "í", text)
+    text = re.sub(r"{\\\'E}", "É", text)
+    text = re.sub(r"{\\\'A}", "Á", text)
+    text = re.sub(r"{\\\'O}", "Ó", text)
+    text = re.sub(r"{\\\'I}", "Í", text)
+    text = re.sub(r"{\\\'U}", "Ú", text)
+    text = re.sub(r"{\\\'c}", "ç", text)
+    text = re.sub(r"{\\\'C}", "Ç", text)
+    text = re.sub(r"{\\\'n}", "ñ", text)
+    text = re.sub(r"{\\\'N}", "Ñ", text)
+
     return text
 
 
